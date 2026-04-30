@@ -176,6 +176,8 @@
             if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); }
         }
 
+        // --- BUTTON LOGIC ---
+
         function toggleIgnition() {
             const card = document.getElementById('ignCard');
             isIgnitionOn = !isIgnitionOn;
@@ -185,11 +187,31 @@
             if(!isIgnitionOn) { 
                 stopEcoTimer(); 
                 hasRiddenSession = false; 
+                
+                // NEW: Force the UI light button OFF if it was left on
+                const lightCard = document.getElementById('lightCard');
+                if (lightCard.classList.contains('active-lights')) {
+                    lightCard.classList.remove('active-lights');
+                    sendCommand('l');
+                }
             }
         }
         
         function toggleLights() { if(!isIgnitionOn) return; const card = document.getElementById('lightCard'); let on = card.classList.toggle('active-lights'); sendCommand(on ? 'L' : 'l'); }
-        function handleHold(cmd, cls, down) { const btn = event.currentTarget; if (down) { if (isIgnitionOn || cmd === 'S' || cmd === 'H') { sendCommand(cmd); btn.classList.add(cls); } } else { sendCommand(cmd); btn.classList.remove(cls); } }
+        
+        function handleHold(cmd, cls, down) { 
+            const btn = event.currentTarget; 
+            if (down) { 
+                // NEW: Only allow Horn and Starter to trigger IF the Ignition is ON!
+                if (isIgnitionOn) { 
+                    sendCommand(cmd); 
+                    btn.classList.add(cls); 
+                } 
+            } else { 
+                sendCommand(cmd); 
+                btn.classList.remove(cls); 
+            } 
+        }
 
         function toggleEcoMode() {
             isEcoMode = !isEcoMode;
@@ -197,7 +219,7 @@
             btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF";
             btn.classList.toggle('active', isEcoMode);
             
-            // NEW: Send signal to Arduino Serial Monitor
+            // Send signal to Arduino Serial Monitor
             sendCommand(isEcoMode ? 'E' : 'e'); 
             
             if (!isEcoMode) stopEcoTimer();
