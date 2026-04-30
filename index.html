@@ -72,14 +72,22 @@
         .progress-track { background: rgba(0,0,0,0.5); height: 6px; border-radius: 6px; overflow: hidden; margin-top: 5px; } 
         .progress-fill { background: var(--accent-cyan); height: 100%; width: 100%; transition: 1s; box-shadow: 0 0 12px var(--accent-cyan); }
 
-        /* BIGGER Bottom Control Buttons */
+        /* BRIGHTER GLOW & BIGGER Bottom Control Buttons */
         .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 15px; }
         .control-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 26px; padding: 45px 0; display: flex; justify-content: center; align-items: center; transition: 0.3s; cursor: pointer; } 
         .control-btn i { font-size: 42px; color: #3a4b66; transition: 0.3s; } 
-        .active-ignition { background: rgba(0,230,118,0.05); border-color: var(--success); } .active-ignition i { color: var(--success); text-shadow: 0 0 15px var(--success); }
-        .active-lights { background: rgba(0,229,255,0.05); border-color: var(--accent-cyan); } .active-lights i { color: var(--accent-cyan); text-shadow: 0 0 15px var(--accent-cyan); }
-        .active-start { background: rgba(255,23,68,0.05); border-color: var(--danger); } .active-start i { color: #fff; text-shadow: 0 0 15px var(--danger); }
-        .active-horn { background: rgba(255,234,0,0.05); border-color: var(--warning); } .active-horn i { color: #fff; text-shadow: 0 0 15px var(--warning); }
+        
+        .active-ignition { background: rgba(0,230,118,0.15); border-color: var(--success); box-shadow: inset 0 0 15px rgba(0,230,118,0.2), 0 0 20px rgba(0,230,118,0.2); } 
+        .active-ignition i { color: var(--success); text-shadow: 0 0 20px var(--success), 0 0 45px var(--success); }
+        
+        .active-lights { background: rgba(0,229,255,0.15); border-color: var(--accent-cyan); box-shadow: inset 0 0 15px rgba(0,229,255,0.2), 0 0 20px rgba(0,229,255,0.2); } 
+        .active-lights i { color: var(--accent-cyan); text-shadow: 0 0 20px var(--accent-cyan), 0 0 45px var(--accent-cyan); }
+        
+        .active-start { background: rgba(255,23,68,0.15); border-color: var(--danger); box-shadow: inset 0 0 15px rgba(255,23,68,0.2), 0 0 20px rgba(255,23,68,0.2); } 
+        .active-start i { color: #fff; text-shadow: 0 0 20px var(--danger), 0 0 45px var(--danger); }
+        
+        .active-horn { background: rgba(255,234,0,0.15); border-color: var(--warning); box-shadow: inset 0 0 15px rgba(255,234,0,0.2), 0 0 20px rgba(255,234,0,0.2); } 
+        .active-horn i { color: #fff; text-shadow: 0 0 20px var(--warning), 0 0 45px var(--warning); }
 
         .connect-btn { width: 100%; padding: 22px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: 24px; cursor: pointer; font-family: 'Orbitron'; font-size: 18px; letter-spacing: 2px; font-weight: 700; transition: 0.3s; } 
         .connect-btn:hover { background: rgba(255,255,255,0.1); }
@@ -126,8 +134,9 @@
         <div id="debugStr" class="debug-console">SYS: STANDBY</div>
 
         <div class="controls-grid">
-            <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-key"></i></div>
-            <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-lightbulb"></i></div>
+            <!-- Icons changed to Power (Ignition) and Sun (Headlight) -->
+            <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-power-off"></i></div>
+            <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-sun"></i></div>
             <div class="control-btn" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
             <div class="control-btn" onmousedown="handleHold('H','active-horn',true)" onmouseup="handleHold('h','active-horn',false)" ontouchstart="handleHold('H','active-horn',true); event.preventDefault();" ontouchend="handleHold('h','active-horn',false); event.preventDefault();"><i class="fa-solid fa-volume-high"></i></div>
         </div>
@@ -142,7 +151,6 @@
         let isWriting = false, commandQueue = [];
         let dataBuffer = "";
 
-        // ECO & ALARM STATE
         let isEcoMode = false;
         let ecoTimerInterval = null;
         let countdown = 10;
@@ -168,8 +176,6 @@
             if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); }
         }
 
-        // --- BUTTON LOGIC ---
-
         function toggleIgnition() {
             const card = document.getElementById('ignCard');
             isIgnitionOn = !isIgnitionOn;
@@ -190,6 +196,10 @@
             const btn = document.getElementById('ecoBtn');
             btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF";
             btn.classList.toggle('active', isEcoMode);
+            
+            // NEW: Send signal to Arduino Serial Monitor
+            sendCommand(isEcoMode ? 'E' : 'e'); 
+            
             if (!isEcoMode) stopEcoTimer();
         }
 
@@ -219,8 +229,6 @@
             }
         }
 
-        // --- ECO TIMER LOGIC ---
-
         function startEcoTimer() {
             if (ecoTimerInterval) return; 
             countdown = 10;
@@ -248,18 +256,14 @@
             }
         }
 
-        // --- BLUETOOTH CONNECTION & AUTO-RECONNECT ---
-
         async function connectBluetooth() {
             try {
                 debugStr.innerText = "SYS: REQUESTING DEVICE...";
-                
                 if (!bleDevice) {
                     bleDevice = await navigator.bluetooth.requestDevice({ 
                         filters: [{ name: 'Avenger_Custom' }], 
                         optionalServices: [serviceUuid] 
                     });
-                    
                     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
                 }
 
@@ -285,12 +289,10 @@
             }
         }
 
-        // Handle Disconnections
         function onDisconnected() {
             statusPill.innerText = "RECONNECTING...";
             statusPill.className = "status-pill"; 
             debugStr.innerText = "SYS: CONNECTION LOST. ATTEMPTING RECONNECT...";
-            
             setTimeout(() => {
                 if (bleDevice && !bleDevice.gatt.connected) {
                     connectBluetooth();
@@ -298,7 +300,6 @@
             }, 2000);
         }
 
-        // Process Incoming Data
         function handleIncomingData(event) {
             let value = event.target.value;
             for (let i = 0; i < value.byteLength; i++) {
@@ -309,7 +310,6 @@
             let parts = dataBuffer.split(',');
             if (parts.length >= 3 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
                 
-                // 1. Odometer (Service Due)
                 let kmRemaining = parseFloat(parts[0]);
                 if (!isNaN(kmRemaining)) {
                     let displayKm = kmRemaining < 0 ? 0 : Math.round(kmRemaining);
@@ -333,7 +333,6 @@
                     }
                 }
 
-                // 2. Temp
                 let tempNum = parseFloat(parts[1]);
                 let tElem = document.getElementById('tempDigit');
                 let tBar = document.getElementById('tempBar');
@@ -357,7 +356,6 @@
                     }
                 }
 
-                // 3. Gear & Eco Logic
                 let gearStr = parts[2].replace(/[^A-Za-z0-9-]/g, '');
                 let gearDisplay = document.getElementById('gearVal');
                 gearDisplay.innerText = gearStr;
