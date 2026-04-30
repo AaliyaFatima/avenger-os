@@ -45,7 +45,6 @@
         .gear-display.neutral { color: var(--success); text-shadow: 0 0 40px rgba(0,230,118,0.4); }
         .gear-label { font-size: 12px; color: var(--text-muted); letter-spacing: 3px; font-weight: 800; margin-top: 10px; } 
 
-        /* BIGGER Top Badges for Alarm and Eco */
         .badge-btn {
             position: absolute; top: 18px; border: 1px solid var(--glass-border);
             padding: 12px 20px; border-radius: 12px; font-size: 14px; font-weight: 800; cursor: pointer; transition: 0.3s; letter-spacing: 1px;
@@ -74,15 +73,14 @@
         .progress-fill { background: var(--accent-cyan); height: 100%; width: 100%; transition: 1s; box-shadow: 0 0 12px var(--accent-cyan); }
 
         /* BIGGER Bottom Control Buttons */
-        .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 5px; }
-        .control-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 24px; padding: 35px 0; display: flex; justify-content: center; align-items: center; transition: 0.3s; cursor: pointer; } 
-        .control-btn i { font-size: 32px; color: #3a4b66; transition: 0.3s; } 
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 15px; }
+        .control-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 26px; padding: 45px 0; display: flex; justify-content: center; align-items: center; transition: 0.3s; cursor: pointer; } 
+        .control-btn i { font-size: 42px; color: #3a4b66; transition: 0.3s; } 
         .active-ignition { background: rgba(0,230,118,0.05); border-color: var(--success); } .active-ignition i { color: var(--success); text-shadow: 0 0 15px var(--success); }
         .active-lights { background: rgba(0,229,255,0.05); border-color: var(--accent-cyan); } .active-lights i { color: var(--accent-cyan); text-shadow: 0 0 15px var(--accent-cyan); }
         .active-start { background: rgba(255,23,68,0.05); border-color: var(--danger); } .active-start i { color: #fff; text-shadow: 0 0 15px var(--danger); }
         .active-horn { background: rgba(255,234,0,0.05); border-color: var(--warning); } .active-horn i { color: #fff; text-shadow: 0 0 15px var(--warning); }
 
-        /* BIGGER Connect Button */
         .connect-btn { width: 100%; padding: 22px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: 24px; cursor: pointer; font-family: 'Orbitron'; font-size: 18px; letter-spacing: 2px; font-weight: 700; transition: 0.3s; } 
         .connect-btn:hover { background: rgba(255,255,255,0.1); }
         .debug-console { text-align: center; font-family: monospace; font-size: 11px; color: var(--warning); min-height: 15px; margin-top: 5px; letter-spacing: 0.5px;}
@@ -256,14 +254,12 @@
             try {
                 debugStr.innerText = "SYS: REQUESTING DEVICE...";
                 
-                // If we don't have a device yet, ask the user to select it
                 if (!bleDevice) {
                     bleDevice = await navigator.bluetooth.requestDevice({ 
                         filters: [{ name: 'Avenger_Custom' }], 
                         optionalServices: [serviceUuid] 
                     });
                     
-                    // Setup disconnect listener for auto-reconnect
                     bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
                 }
 
@@ -295,7 +291,6 @@
             statusPill.className = "status-pill"; 
             debugStr.innerText = "SYS: CONNECTION LOST. ATTEMPTING RECONNECT...";
             
-            // Try to reconnect immediately in the background
             setTimeout(() => {
                 if (bleDevice && !bleDevice.gatt.connected) {
                     connectBluetooth();
@@ -344,13 +339,12 @@
                 let tBar = document.getElementById('tempBar');
                 
                 if (isNaN(tempNum) || tempNum <= 0) {
-                    // Graceful handling of missing sensor
                     tElem.textContent = "NO SENSOR";
                     tElem.style.fontSize = "16px";
                     tElem.style.color = "var(--danger)";
                     tBar.style.width = "0%";
                 } else {
-                    tElem.style.fontSize = "28px"; // Reset font size
+                    tElem.style.fontSize = "28px"; 
                     if (tempNum < 35) {
                         tElem.textContent = "COLD"; tElem.style.color = "var(--accent-blue)";
                         tBar.style.background = "var(--accent-blue)"; tBar.style.width = "0%";
