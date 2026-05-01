@@ -27,7 +27,7 @@
             min-height: 100vh; display: flex; justify-content: center; user-select: none;
         }
 
-        .app-container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 20px; } 
+        .app-container { width: 100%; max-width: 480px; display: flex; flex-direction: column; gap: 12px; } 
 
         .header-row { display: flex; justify-content: space-between; align-items: center; }
         h1 { font-family: 'Orbitron', sans-serif; font-size: 24px; letter-spacing: 2px; margin: 0; } 
@@ -65,7 +65,7 @@
         .eco-warning-text { font-size: 16px; font-weight: 800; letter-spacing: 2px; color: #000; }
 
         .dash-row { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; } 
-        .glass-panel { background: var(--glass-bg); backdrop-filter: blur(25px); border: 1px solid var(--glass-border); border-radius: 24px; padding: 20px; display: flex; flex-direction: column; justify-content: center;} 
+        .glass-panel { background: var(--glass-bg); backdrop-filter: blur(25px); border: 1px solid var(--glass-border); border-radius: 18px; padding: 12px 15px; display: flex; flex-direction: column; justify-content: center;} 
         .label { font-size: 12px; color: var(--text-muted); letter-spacing: 1.5px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
         .readout { font-family: 'Orbitron', sans-serif; font-size: 28px; color: #fff; margin: 12px 0; } 
         .unit { font-size: 13px; color: var(--text-muted); }
@@ -77,7 +77,7 @@
         .battery-readout { font-family: 'Orbitron', sans-serif; font-size: 28px; color: var(--accent-blue); margin: 12px 0; transition: color 0.3s;}
         
         .trip-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: -5px; }
-        .trip-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 18px; padding: 15px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .trip-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 14px; padding: 10px 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .trip-panel .label { font-size: 10px; letter-spacing: 2px; }
         .trip-val { font-family: 'Orbitron'; font-size: 18px; font-weight: 700; color: #fff; margin-top: 5px; }
         .trip-val span.unit { font-size: 10px; color: var(--accent-cyan); }
@@ -98,7 +98,7 @@
         .active-horn { background: rgba(255,234,0,0.15); border-color: var(--warning); box-shadow: inset 0 0 15px rgba(255,234,0,0.2), 0 0 20px rgba(255,234,0,0.2); } 
         .active-horn i { color: #fff; text-shadow: 0 0 20px var(--warning), 0 0 45px var(--warning); }
 
-        .connect-btn { width: 100%; padding: 22px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: 24px; cursor: pointer; font-family: 'Orbitron'; font-size: 18px; letter-spacing: 2px; font-weight: 700; transition: 0.3s; } 
+        .connect-btn { width: 100%; padding: 18px; background: rgba(255,255,255,0.05); border: 1px solid var(--glass-border); color: #fff; border-radius: 24px; cursor: pointer; font-family: 'Orbitron'; font-size: 18px; letter-spacing: 2px; font-weight: 700; transition: 0.3s; } 
         .connect-btn:hover { background: rgba(255,255,255,0.1); }
         .debug-console { text-align: center; font-family: monospace; font-size: 11px; color: var(--warning); min-height: 15px; margin-top: 5px; letter-spacing: 0.5px;}
     </style>
