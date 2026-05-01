@@ -68,11 +68,14 @@
         .glass-panel { background: var(--glass-bg); backdrop-filter: blur(25px); border: 1px solid var(--glass-border); border-radius: 24px; padding: 20px; display: flex; flex-direction: column; justify-content: center;} 
         .label { font-size: 12px; color: var(--text-muted); letter-spacing: 1.5px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
         .readout { font-family: 'Orbitron', sans-serif; font-size: 28px; color: #fff; margin: 12px 0; } 
-        .unit { font-size: 13px; color: var(--accent-cyan); }
+        .unit { font-size: 13px; color: var(--text-muted); }
         .progress-track { background: rgba(0,0,0,0.5); height: 6px; border-radius: 6px; overflow: hidden; margin-top: 5px; } 
         .progress-fill { background: var(--accent-cyan); height: 100%; width: 100%; transition: 1s; box-shadow: 0 0 12px var(--accent-cyan); }
 
-        /* NEW TRIP COMPUTER STYLES */
+        /* NEW BATTERY PANEL */
+        .battery-panel { margin-top: -5px; }
+        .battery-readout { font-family: 'Orbitron', sans-serif; font-size: 28px; color: var(--accent-blue); margin: 12px 0; transition: color 0.3s;}
+        
         .trip-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: -5px; }
         .trip-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 18px; padding: 15px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
         .trip-panel .label { font-size: 10px; letter-spacing: 2px; }
@@ -136,7 +139,16 @@
             </div>
         </div>
 
-        <!-- NEW TRIP COMPUTER UI -->
+        <!-- NEW BATTERY HEALTH MONITOR -->
+        <div class="glass-panel battery-panel">
+            <div class="label">BATTERY HEALTH 
+                <i class="fa-solid fa-bolt" style="color: var(--warning);"></i>
+            </div>
+            <div class="battery-readout"><span id="battDigit">--.-</span> <span class="unit">V</span></div>
+            <div class="progress-track"><div class="progress-fill" id="battBar" style="background:var(--accent-blue); width:0%;"></div></div>
+        </div>
+
+        <!-- TRIP COMPUTER UI -->
         <div class="trip-row">
             <div class="trip-panel">
                 <div class="label">DAY</div>
@@ -178,7 +190,6 @@
         let hasRiddenSession = false; 
         let isAlarmArmed = false;
 
-        // Trip Computer Variables
         let lastServiceKm = null;
 
         const connectBtn = document.getElementById('connectBtn');
@@ -187,7 +198,7 @@
         const ecoWarning = document.getElementById('ecoWarning');
         const ecoTimerDisplay = document.getElementById('ecoTimerDisplay');
 
-        // --- TRIP COMPUTER LOGIC ---
+        // Trip Computer Logic
         function getWeekNumber(d) {
             d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
             d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
@@ -201,21 +212,9 @@
             let weekStr = now.getFullYear() + "-W" + getWeekNumber(now);
             let monthStr = now.getFullYear() + "-" + now.getMonth();
 
-            // If the day changed, reset daily trip to 0
-            if(localStorage.getItem('currentDay') !== todayStr) {
-                localStorage.setItem('currentDay', todayStr);
-                localStorage.setItem('tripDay', '0');
-            }
-            // If the week changed, reset weekly trip to 0
-            if(localStorage.getItem('currentWeek') !== weekStr) {
-                localStorage.setItem('currentWeek', weekStr);
-                localStorage.setItem('tripWeek', '0');
-            }
-            // If the month changed, reset monthly trip to 0
-            if(localStorage.getItem('currentMonth') !== monthStr) {
-                localStorage.setItem('currentMonth', monthStr);
-                localStorage.setItem('tripMonth', '0');
-            }
+            if(localStorage.getItem('currentDay') !== todayStr) { localStorage.setItem('currentDay', todayStr); localStorage.setItem('tripDay', '0'); }
+            if(localStorage.getItem('currentWeek') !== weekStr) { localStorage.setItem('currentWeek', weekStr); localStorage.setItem('tripWeek', '0'); }
+            if(localStorage.getItem('currentMonth') !== monthStr) { localStorage.setItem('currentMonth', monthStr); localStorage.setItem('tripMonth', '0'); }
         }
 
         function updateTripUI() {
@@ -226,63 +225,43 @@
 
         function processTripDistance(currentServiceKm) {
             if(lastServiceKm === null) { lastServiceKm = currentServiceKm; return; }
-            
-            // If service KM went down, it means we are driving forward!
             if(currentServiceKm < lastServiceKm) {
                 let diff = lastServiceKm - currentServiceKm;
-                
-                // Sanity check (ignore massive jumps if user hit the 'Reset Service' button)
                 if(diff > 0 && diff < 50) { 
                     checkTripDates();
                     let d = parseFloat(localStorage.getItem('tripDay') || 0) + diff;
                     let w = parseFloat(localStorage.getItem('tripWeek') || 0) + diff;
                     let m = parseFloat(localStorage.getItem('tripMonth') || 0) + diff;
                     
-                    localStorage.setItem('tripDay', d);
-                    localStorage.setItem('tripWeek', w);
-                    localStorage.setItem('tripMonth', m);
-                    
+                    localStorage.setItem('tripDay', d); localStorage.setItem('tripWeek', w); localStorage.setItem('tripMonth', m);
                     updateTripUI();
                 }
             }
             lastServiceKm = currentServiceKm;
         }
 
-        // Initialize UI on load
-        window.onload = () => {
-            checkTripDates();
-            updateTripUI();
-        };
+        window.onload = () => { checkTripDates(); updateTripUI(); };
 
-        // --- BLUETOOTH & QUEUE LOGIC ---
+        // BLE Logic
         async function processQueue() {
             if (isWriting || commandQueue.length === 0 || !rxChar) return;
-            isWriting = true;
-            let c = commandQueue.shift();
+            isWriting = true; let c = commandQueue.shift();
             try { await rxChar.writeValue(new TextEncoder().encode(c)); } catch (err) {}
             isWriting = false;
             if (commandQueue.length > 0) processQueue();
         }
         
-        function sendCommand(c) {
-            if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); }
-        }
+        function sendCommand(c) { if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); } }
 
         function toggleIgnition() {
             const card = document.getElementById('ignCard');
             isIgnitionOn = !isIgnitionOn;
             sendCommand(isIgnitionOn ? 'I' : 'i');
             card.classList.toggle('active-ignition', isIgnitionOn);
-            
             if(!isIgnitionOn) { 
-                stopEcoTimer(); 
-                hasRiddenSession = false; 
-                
+                stopEcoTimer(); hasRiddenSession = false; 
                 const lightCard = document.getElementById('lightCard');
-                if (lightCard.classList.contains('active-lights')) {
-                    lightCard.classList.remove('active-lights');
-                    sendCommand('l');
-                }
+                if (lightCard.classList.contains('active-lights')) { lightCard.classList.remove('active-lights'); sendCommand('l'); }
             }
         }
         
@@ -290,202 +269,135 @@
         
         function handleHold(cmd, cls, down) { 
             const btn = event.currentTarget; 
-            if (down) { 
-                if (isIgnitionOn) { 
-                    sendCommand(cmd); 
-                    btn.classList.add(cls); 
-                } 
-            } else { 
-                sendCommand(cmd); 
-                btn.classList.remove(cls); 
-            } 
+            if (down) { if (isIgnitionOn) { sendCommand(cmd); btn.classList.add(cls); } } 
+            else { sendCommand(cmd); btn.classList.remove(cls); } 
         }
 
         function toggleEcoMode() {
-            isEcoMode = !isEcoMode;
-            const btn = document.getElementById('ecoBtn');
-            btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF";
-            btn.classList.toggle('active', isEcoMode);
-            sendCommand(isEcoMode ? 'E' : 'e'); 
-            if (!isEcoMode) stopEcoTimer();
+            isEcoMode = !isEcoMode; const btn = document.getElementById('ecoBtn');
+            btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF"; btn.classList.toggle('active', isEcoMode);
+            sendCommand(isEcoMode ? 'E' : 'e'); if (!isEcoMode) stopEcoTimer();
         }
 
         function toggleAlarm() {
-            isAlarmArmed = !isAlarmArmed;
-            const btn = document.getElementById('alarmBtn');
-            if (isAlarmArmed) {
-                btn.innerText = "ALARM ON";
-                btn.classList.add('active');
-                sendCommand('A'); 
-            } else {
-                btn.innerText = "ALARM OFF";
-                btn.classList.remove('active');
-                sendCommand('a'); 
-            }
+            isAlarmArmed = !isAlarmArmed; const btn = document.getElementById('alarmBtn');
+            if (isAlarmArmed) { btn.innerText = "ALARM ON"; btn.classList.add('active'); sendCommand('A'); } 
+            else { btn.innerText = "ALARM OFF"; btn.classList.remove('active'); sendCommand('a'); }
         }
 
         function resetService() {
             if(confirm("Are you sure you want to reset the Service Interval to 3000 KM?")) {
                 sendCommand('R'); 
-                document.getElementById('serviceVal').innerText = "3000";
-                document.getElementById('serviceBar').style.width = "100%";
-                document.getElementById('serviceVal').style.color = "white";
-                document.getElementById('serviceBar').style.background = "var(--accent-cyan)";
+                document.getElementById('serviceVal').innerText = "3000"; document.getElementById('serviceBar').style.width = "100%";
+                document.getElementById('serviceVal').style.color = "white"; document.getElementById('serviceBar').style.background = "var(--accent-cyan)";
                 document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)";
-                window.notifiedOil = false;
-                
-                // Reset internal tracker so it doesn't log a false 3000km trip
-                lastServiceKm = 3000; 
+                window.notifiedOil = false; lastServiceKm = 3000; 
             }
         }
 
         function startEcoTimer() {
-            if (ecoTimerInterval) return; 
-            countdown = 10;
-            ecoTimerDisplay.innerText = countdown;
-            ecoWarning.classList.add('show');
-
+            if (ecoTimerInterval) return; countdown = 10; ecoTimerDisplay.innerText = countdown; ecoWarning.classList.add('show');
             ecoTimerInterval = setInterval(() => {
-                countdown--;
-                ecoTimerDisplay.innerText = countdown;
-                if (countdown <= 0) {
-                    stopEcoTimer();
-                    ecoTimerDisplay.innerText = "KILLED";
-                    sendCommand('i'); 
-                    document.getElementById('ignCard').classList.remove('active-ignition');
-                    isIgnitionOn = false;
-                }
+                countdown--; ecoTimerDisplay.innerText = countdown;
+                if (countdown <= 0) { stopEcoTimer(); ecoTimerDisplay.innerText = "KILLED"; sendCommand('i'); document.getElementById('ignCard').classList.remove('active-ignition'); isIgnitionOn = false; }
             }, 1000);
         }
 
-        function stopEcoTimer() {
-            if (ecoTimerInterval) {
-                clearInterval(ecoTimerInterval);
-                ecoTimerInterval = null;
-                ecoWarning.classList.remove('show');
-            }
-        }
+        function stopEcoTimer() { if (ecoTimerInterval) { clearInterval(ecoTimerInterval); ecoTimerInterval = null; ecoWarning.classList.remove('show'); } }
 
         async function connectBluetooth() {
             try {
                 debugStr.innerText = "SYS: REQUESTING DEVICE...";
-                if (!bleDevice) {
-                    bleDevice = await navigator.bluetooth.requestDevice({ 
-                        filters: [{ name: 'Avenger_Custom' }], 
-                        optionalServices: [serviceUuid] 
-                    });
-                    bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
-                }
-
+                if (!bleDevice) { bleDevice = await navigator.bluetooth.requestDevice({ filters: [{ name: 'Avenger_Custom' }], optionalServices: [serviceUuid] }); bleDevice.addEventListener('gattserverdisconnected', onDisconnected); }
                 debugStr.innerText = "SYS: CONNECTING...";
-                const server = await bleDevice.gatt.connect();
-                const service = await server.getPrimaryService(serviceUuid);
-                rxChar = await service.getCharacteristic(rxUuid);
-                const txChar = await service.getCharacteristic(txUuid);
-                await txChar.startNotifications();
-                
-                txChar.addEventListener('characteristicvaluechanged', handleIncomingData);
-
-                statusPill.innerText = "ONLINE"; 
-                statusPill.className = "status-pill online";
-                connectBtn.style.display = "none";
-                debugStr.innerText = "SYS: CONNECTED.";
-                
+                const server = await bleDevice.gatt.connect(); const service = await server.getPrimaryService(serviceUuid);
+                rxChar = await service.getCharacteristic(rxUuid); const txChar = await service.getCharacteristic(txUuid);
+                await txChar.startNotifications(); txChar.addEventListener('characteristicvaluechanged', handleIncomingData);
+                statusPill.innerText = "ONLINE"; statusPill.className = "status-pill online"; connectBtn.style.display = "none"; debugStr.innerText = "SYS: CONNECTED.";
             } catch (err) { 
-                debugStr.innerText = "ERR: " + err.message; 
-                statusPill.innerText = "OFFLINE";
-                statusPill.className = "status-pill";
-                connectBtn.style.display = "block";
+                debugStr.innerText = "ERR: " + err.message; statusPill.innerText = "OFFLINE"; statusPill.className = "status-pill"; connectBtn.style.display = "block";
             }
         }
 
         function onDisconnected() {
-            statusPill.innerText = "RECONNECTING...";
-            statusPill.className = "status-pill"; 
-            debugStr.innerText = "SYS: CONNECTION LOST. ATTEMPTING RECONNECT...";
-            setTimeout(() => {
-                if (bleDevice && !bleDevice.gatt.connected) {
-                    connectBluetooth();
-                }
-            }, 2000);
+            statusPill.innerText = "RECONNECTING..."; statusPill.className = "status-pill"; debugStr.innerText = "SYS: CONNECTION LOST. ATTEMPTING RECONNECT...";
+            setTimeout(() => { if (bleDevice && !bleDevice.gatt.connected) connectBluetooth(); }, 2000);
         }
 
         function handleIncomingData(event) {
             let value = event.target.value;
-            for (let i = 0; i < value.byteLength; i++) {
-                dataBuffer += String.fromCharCode(value.getUint8(i));
-            }
+            for (let i = 0; i < value.byteLength; i++) { dataBuffer += String.fromCharCode(value.getUint8(i)); }
             if (dataBuffer.length > 50) dataBuffer = "";
 
             let parts = dataBuffer.split(',');
-            if (parts.length >= 3 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
+            if (parts.length >= 4 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
                 
+                // 1. Service & Trips
                 let kmRemaining = parseFloat(parts[0]);
                 if (!isNaN(kmRemaining)) {
-                    
-                    // NEW: Process the Trip Distance before updating UI
                     processTripDistance(kmRemaining);
-
                     let displayKm = kmRemaining < 0 ? 0 : Math.round(kmRemaining);
                     document.getElementById('serviceVal').innerText = displayKm;
                     let percent = Math.max((displayKm / 3000) * 100, 0);
                     document.getElementById('serviceBar').style.width = percent + "%";
                     
                     if (kmRemaining <= 0) {
-                        document.getElementById('serviceVal').style.color = "var(--danger)";
-                        document.getElementById('serviceBar').style.background = "var(--danger)";
-                        document.getElementById('serviceBar').style.boxShadow = "0 0 15px var(--danger)";
-                        if(!window.notifiedOil) {
-                            alert("⚠️ MAINTENANCE ALERT: You have driven 3,000 KM. Please change your engine oil immediately!");
-                            window.notifiedOil = true;
-                        }
+                        document.getElementById('serviceVal').style.color = "var(--danger)"; document.getElementById('serviceBar').style.background = "var(--danger)"; document.getElementById('serviceBar').style.boxShadow = "0 0 15px var(--danger)";
+                        if(!window.notifiedOil) { alert("⚠️ MAINTENANCE ALERT: Engine oil change needed!"); window.notifiedOil = true; }
                     } else {
-                        document.getElementById('serviceVal').style.color = "white";
-                        document.getElementById('serviceBar').style.background = "var(--accent-cyan)";
-                        document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)";
-                        window.notifiedOil = false;
+                        document.getElementById('serviceVal').style.color = "white"; document.getElementById('serviceBar').style.background = "var(--accent-cyan)"; document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)"; window.notifiedOil = false;
                     }
                 }
 
+                // 2. Temperature
                 let tempNum = parseFloat(parts[1]);
-                let tElem = document.getElementById('tempDigit');
-                let tBar = document.getElementById('tempBar');
-                
-                if (isNaN(tempNum) || tempNum <= 0) {
-                    tElem.textContent = "NO SENSOR";
-                    tElem.style.fontSize = "16px";
-                    tElem.style.color = "var(--danger)";
-                    tBar.style.width = "0%";
-                } else {
+                let tElem = document.getElementById('tempDigit'); let tBar = document.getElementById('tempBar');
+                if (isNaN(tempNum) || tempNum <= 0) { tElem.textContent = "NO SENSOR"; tElem.style.fontSize = "16px"; tElem.style.color = "var(--danger)"; tBar.style.width = "0%"; } 
+                else {
                     tElem.style.fontSize = "28px"; 
-                    if (tempNum < 35) {
-                        tElem.textContent = "COLD"; tElem.style.color = "var(--accent-blue)";
-                        tBar.style.background = "var(--accent-blue)"; tBar.style.width = "0%";
-                    } else {
+                    if (tempNum < 35) { tElem.textContent = "COLD"; tElem.style.color = "var(--accent-blue)"; tBar.style.background = "var(--accent-blue)"; tBar.style.width = "0%"; } 
+                    else {
                         tElem.textContent = Math.round(tempNum);
-                        let p = Math.min(Math.max((tempNum - 35) / 65, 0), 1) * 100;
-                        tBar.style.width = p + "%";
-                        if (tempNum > 100) { tElem.style.color = "var(--danger)"; tBar.style.background = "var(--danger)"; }
-                        else { tElem.style.color = "white"; tBar.style.background = "white"; }
+                        let p = Math.min(Math.max((tempNum - 35) / 65, 0), 1) * 100; tBar.style.width = p + "%";
+                        if (tempNum > 100) { tElem.style.color = "var(--danger)"; tBar.style.background = "var(--danger)"; } else { tElem.style.color = "white"; tBar.style.background = "white"; }
                     }
                 }
 
+                // 3. Gear / Neutral
                 let gearStr = parts[2].replace(/[^A-Za-z0-9-]/g, '');
-                let gearDisplay = document.getElementById('gearVal');
-                gearDisplay.innerText = gearStr;
+                let gearDisplay = document.getElementById('gearVal'); gearDisplay.innerText = gearStr;
+                if (gearStr === "N") { gearDisplay.classList.add('neutral'); if (isEcoMode && isIgnitionOn && hasRiddenSession) startEcoTimer(); } 
+                else { gearDisplay.classList.remove('neutral'); hasRiddenSession = true; stopEcoTimer(); }
+
+                // 4. NEW: Battery Voltage
+                let battVolts = parseFloat(parts[3]);
+                let bElem = document.getElementById('battDigit');
+                let bBar = document.getElementById('battBar');
                 
-                if (gearStr === "N") {
-                    gearDisplay.classList.add('neutral');
-                    if (isEcoMode && isIgnitionOn && hasRiddenSession) {
-                        startEcoTimer();
+                if (!isNaN(battVolts)) {
+                    bElem.textContent = battVolts.toFixed(1);
+                    // Calculate percentage fill based on 9V to 14.4V range
+                    let battPercent = Math.min(Math.max((battVolts - 9.0) / 5.5, 0), 1) * 100; 
+                    bBar.style.width = battPercent + "%";
+                    
+                    if (battVolts >= 13.5) { // Charging
+                        bElem.parentElement.style.color = "var(--success)"; 
+                        bBar.style.background = "var(--success)";
+                        bBar.style.boxShadow = "0 0 12px var(--success)";
+                    } 
+                    else if (battVolts >= 11.5) { // Healthy Parked
+                        bElem.parentElement.style.color = "var(--accent-blue)"; 
+                        bBar.style.background = "var(--accent-blue)";
+                        bBar.style.boxShadow = "0 0 12px var(--accent-blue)";
+                    } 
+                    else { // Dangerously Low / Starter Cranking
+                        bElem.parentElement.style.color = "var(--danger)"; 
+                        bBar.style.background = "var(--danger)";
+                        bBar.style.boxShadow = "0 0 15px var(--danger)";
                     }
-                } else {
-                    gearDisplay.classList.remove('neutral');
-                    hasRiddenSession = true; 
-                    stopEcoTimer(); 
                 }
 
-                debugStr.innerText = "SYS: OK | " + kmRemaining.toFixed(1) + "KM | " + tempNum + "°C | " + gearStr;
+                debugStr.innerText = "SYS: OK | " + kmRemaining.toFixed(1) + "KM | " + tempNum + "°C | " + gearStr + " | " + battVolts.toFixed(1) + "V";
                 dataBuffer = "";
             }
         }
