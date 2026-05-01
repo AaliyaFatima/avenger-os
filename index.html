@@ -72,8 +72,14 @@
         .progress-track { background: rgba(0,0,0,0.5); height: 6px; border-radius: 6px; overflow: hidden; margin-top: 5px; } 
         .progress-fill { background: var(--accent-cyan); height: 100%; width: 100%; transition: 1s; box-shadow: 0 0 12px var(--accent-cyan); }
 
-        /* BRIGHTER GLOW & BIGGER Bottom Control Buttons */
-        .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 15px; }
+        /* NEW TRIP COMPUTER STYLES */
+        .trip-row { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: -5px; }
+        .trip-panel { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 18px; padding: 15px 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+        .trip-panel .label { font-size: 10px; letter-spacing: 2px; }
+        .trip-val { font-family: 'Orbitron'; font-size: 18px; font-weight: 700; color: #fff; margin-top: 5px; }
+        .trip-val span.unit { font-size: 10px; color: var(--accent-cyan); }
+
+        .controls-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; margin-top: 5px; }
         .control-btn { background: var(--glass-bg); border: 1px solid var(--glass-border); border-radius: 26px; padding: 45px 0; display: flex; justify-content: center; align-items: center; transition: 0.3s; cursor: pointer; } 
         .control-btn i { font-size: 42px; color: #3a4b66; transition: 0.3s; } 
         
@@ -130,11 +136,26 @@
             </div>
         </div>
 
+        <!-- NEW TRIP COMPUTER UI -->
+        <div class="trip-row">
+            <div class="trip-panel">
+                <div class="label">DAY</div>
+                <div class="trip-val"><span id="valDay">0.0</span> <span class="unit">KM</span></div>
+            </div>
+            <div class="trip-panel">
+                <div class="label">WEEK</div>
+                <div class="trip-val"><span id="valWeek">0.0</span> <span class="unit">KM</span></div>
+            </div>
+            <div class="trip-panel">
+                <div class="label">MONTH</div>
+                <div class="trip-val"><span id="valMonth">0.0</span> <span class="unit">KM</span></div>
+            </div>
+        </div>
+
         <button id="connectBtn" class="connect-btn">INITIALIZE LINK</button>
         <div id="debugStr" class="debug-console">SYS: STANDBY</div>
 
         <div class="controls-grid">
-            <!-- Icons changed to Power (Ignition) and Sun (Headlight) -->
             <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-power-off"></i></div>
             <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-sun"></i></div>
             <div class="control-btn" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
@@ -157,12 +178,83 @@
         let hasRiddenSession = false; 
         let isAlarmArmed = false;
 
+        // Trip Computer Variables
+        let lastServiceKm = null;
+
         const connectBtn = document.getElementById('connectBtn');
         const statusPill = document.getElementById('statusPill');
         const debugStr = document.getElementById('debugStr');
         const ecoWarning = document.getElementById('ecoWarning');
         const ecoTimerDisplay = document.getElementById('ecoTimerDisplay');
 
+        // --- TRIP COMPUTER LOGIC ---
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        }
+
+        function checkTripDates() {
+            let now = new Date();
+            let todayStr = now.getFullYear() + "-" + now.getMonth() + "-" + now.getDate();
+            let weekStr = now.getFullYear() + "-W" + getWeekNumber(now);
+            let monthStr = now.getFullYear() + "-" + now.getMonth();
+
+            // If the day changed, reset daily trip to 0
+            if(localStorage.getItem('currentDay') !== todayStr) {
+                localStorage.setItem('currentDay', todayStr);
+                localStorage.setItem('tripDay', '0');
+            }
+            // If the week changed, reset weekly trip to 0
+            if(localStorage.getItem('currentWeek') !== weekStr) {
+                localStorage.setItem('currentWeek', weekStr);
+                localStorage.setItem('tripWeek', '0');
+            }
+            // If the month changed, reset monthly trip to 0
+            if(localStorage.getItem('currentMonth') !== monthStr) {
+                localStorage.setItem('currentMonth', monthStr);
+                localStorage.setItem('tripMonth', '0');
+            }
+        }
+
+        function updateTripUI() {
+            document.getElementById('valDay').innerText = (parseFloat(localStorage.getItem('tripDay') || 0)).toFixed(1);
+            document.getElementById('valWeek').innerText = (parseFloat(localStorage.getItem('tripWeek') || 0)).toFixed(1);
+            document.getElementById('valMonth').innerText = (parseFloat(localStorage.getItem('tripMonth') || 0)).toFixed(1);
+        }
+
+        function processTripDistance(currentServiceKm) {
+            if(lastServiceKm === null) { lastServiceKm = currentServiceKm; return; }
+            
+            // If service KM went down, it means we are driving forward!
+            if(currentServiceKm < lastServiceKm) {
+                let diff = lastServiceKm - currentServiceKm;
+                
+                // Sanity check (ignore massive jumps if user hit the 'Reset Service' button)
+                if(diff > 0 && diff < 50) { 
+                    checkTripDates();
+                    let d = parseFloat(localStorage.getItem('tripDay') || 0) + diff;
+                    let w = parseFloat(localStorage.getItem('tripWeek') || 0) + diff;
+                    let m = parseFloat(localStorage.getItem('tripMonth') || 0) + diff;
+                    
+                    localStorage.setItem('tripDay', d);
+                    localStorage.setItem('tripWeek', w);
+                    localStorage.setItem('tripMonth', m);
+                    
+                    updateTripUI();
+                }
+            }
+            lastServiceKm = currentServiceKm;
+        }
+
+        // Initialize UI on load
+        window.onload = () => {
+            checkTripDates();
+            updateTripUI();
+        };
+
+        // --- BLUETOOTH & QUEUE LOGIC ---
         async function processQueue() {
             if (isWriting || commandQueue.length === 0 || !rxChar) return;
             isWriting = true;
@@ -176,8 +268,6 @@
             if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); }
         }
 
-        // --- BUTTON LOGIC ---
-
         function toggleIgnition() {
             const card = document.getElementById('ignCard');
             isIgnitionOn = !isIgnitionOn;
@@ -188,7 +278,6 @@
                 stopEcoTimer(); 
                 hasRiddenSession = false; 
                 
-                // NEW: Force the UI light button OFF if it was left on
                 const lightCard = document.getElementById('lightCard');
                 if (lightCard.classList.contains('active-lights')) {
                     lightCard.classList.remove('active-lights');
@@ -202,7 +291,6 @@
         function handleHold(cmd, cls, down) { 
             const btn = event.currentTarget; 
             if (down) { 
-                // NEW: Only allow Horn and Starter to trigger IF the Ignition is ON!
                 if (isIgnitionOn) { 
                     sendCommand(cmd); 
                     btn.classList.add(cls); 
@@ -218,10 +306,7 @@
             const btn = document.getElementById('ecoBtn');
             btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF";
             btn.classList.toggle('active', isEcoMode);
-            
-            // Send signal to Arduino Serial Monitor
             sendCommand(isEcoMode ? 'E' : 'e'); 
-            
             if (!isEcoMode) stopEcoTimer();
         }
 
@@ -248,6 +333,9 @@
                 document.getElementById('serviceBar').style.background = "var(--accent-cyan)";
                 document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)";
                 window.notifiedOil = false;
+                
+                // Reset internal tracker so it doesn't log a false 3000km trip
+                lastServiceKm = 3000; 
             }
         }
 
@@ -334,6 +422,10 @@
                 
                 let kmRemaining = parseFloat(parts[0]);
                 if (!isNaN(kmRemaining)) {
+                    
+                    // NEW: Process the Trip Distance before updating UI
+                    processTripDistance(kmRemaining);
+
                     let displayKm = kmRemaining < 0 ? 0 : Math.round(kmRemaining);
                     document.getElementById('serviceVal').innerText = displayKm;
                     let percent = Math.max((displayKm / 3000) * 100, 0);
