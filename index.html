@@ -119,7 +119,7 @@
             
             <div id="ecoWarning" class="eco-warning-overlay">
                 <div class="eco-warning-text">AUTO-STOP IN</div>
-                <div id="ecoTimerDisplay" class="eco-timer">10</div>
+                <div id="ecoTimerDisplay" class="eco-timer">15s</div>
             </div>
         </div>
 
@@ -185,11 +185,7 @@
         let dataBuffer = "";
 
         let isEcoMode = false;
-        let ecoTimerInterval = null;
-        let countdown = 10;
-        let hasRiddenSession = false; 
         let isAlarmArmed = false;
-
         let lastServiceKm = null;
 
         const connectBtn = document.getElementById('connectBtn');
@@ -259,7 +255,6 @@
             sendCommand(isIgnitionOn ? 'I' : 'i');
             card.classList.toggle('active-ignition', isIgnitionOn);
             if(!isIgnitionOn) { 
-                stopEcoTimer(); hasRiddenSession = false; 
                 const lightCard = document.getElementById('lightCard');
                 if (lightCard.classList.contains('active-lights')) { lightCard.classList.remove('active-lights'); sendCommand('l'); }
             }
@@ -276,7 +271,7 @@
         function toggleEcoMode() {
             isEcoMode = !isEcoMode; const btn = document.getElementById('ecoBtn');
             btn.innerText = isEcoMode ? "ECO ON" : "ECO OFF"; btn.classList.toggle('active', isEcoMode);
-            sendCommand(isEcoMode ? 'E' : 'e'); if (!isEcoMode) stopEcoTimer();
+            sendCommand(isEcoMode ? 'E' : 'e'); 
         }
 
         function toggleAlarm() {
@@ -294,16 +289,6 @@
                 window.notifiedOil = false; lastServiceKm = 3000; 
             }
         }
-
-        function startEcoTimer() {
-            if (ecoTimerInterval) return; countdown = 10; ecoTimerDisplay.innerText = countdown; ecoWarning.classList.add('show');
-            ecoTimerInterval = setInterval(() => {
-                countdown--; ecoTimerDisplay.innerText = countdown;
-                if (countdown <= 0) { stopEcoTimer(); ecoTimerDisplay.innerText = "KILLED"; sendCommand('i'); document.getElementById('ignCard').classList.remove('active-ignition'); isIgnitionOn = false; }
-            }, 1000);
-        }
-
-        function stopEcoTimer() { if (ecoTimerInterval) { clearInterval(ecoTimerInterval); ecoTimerInterval = null; ecoWarning.classList.remove('show'); } }
 
         async function connectBluetooth() {
             try {
@@ -327,10 +312,10 @@
         function handleIncomingData(event) {
             let value = event.target.value;
             for (let i = 0; i < value.byteLength; i++) { dataBuffer += String.fromCharCode(value.getUint8(i)); }
-            if (dataBuffer.length > 50) dataBuffer = "";
+            if (dataBuffer.length > 60) dataBuffer = ""; // Increased buffer slightly for new variable length
 
             let parts = dataBuffer.split(',');
-            if (parts.length >= 4 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
+            if (parts.length >= 5 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
                 
                 // 1. Service & Trips
                 let kmRemaining = parseFloat(parts[0]);
@@ -366,10 +351,10 @@
                 // 3. Gear / Neutral
                 let gearStr = parts[2].replace(/[^A-Za-z0-9-]/g, '');
                 let gearDisplay = document.getElementById('gearVal'); gearDisplay.innerText = gearStr;
-                if (gearStr === "N") { gearDisplay.classList.add('neutral'); if (isEcoMode && isIgnitionOn && hasRiddenSession) startEcoTimer(); } 
-                else { gearDisplay.classList.remove('neutral'); hasRiddenSession = true; stopEcoTimer(); }
+                if (gearStr === "N") { gearDisplay.classList.add('neutral'); } 
+                else { gearDisplay.classList.remove('neutral'); }
 
-                // 4. NEW: Battery Voltage
+                // 4. Battery Voltage
                 let battVolts = parseFloat(parts[3]);
                 let bElem = document.getElementById('battDigit');
                 let bBar = document.getElementById('battBar');
@@ -397,7 +382,30 @@
                     }
                 }
 
-               debugStr.innerText = "SYS: OK | " + tempNum + "°C";
+                // 5. NEW: Eco Mode Countdown string from ESP32
+                let ecoStr = parts[4].replace(/[\n\r]/g, ''); 
+                if (ecoStr !== "OFF" && ecoStr !== "") {
+                    ecoWarning.classList.add('show');
+                    ecoTimerDisplay.innerText = ecoStr;
+                    
+                    // If ESP32 triggered the auto-shutoff
+                    if (ecoStr === "STOPPED") {
+                        document.getElementById('ignCard').classList.remove('active-ignition');
+                        isIgnitionOn = false;
+                        
+                        // Turn off Eco Mode UI button so it matches ESP32 state
+                        isEcoMode = false;
+                        document.getElementById('ecoBtn').innerText = "ECO OFF";
+                        document.getElementById('ecoBtn').classList.remove('active');
+                        
+                        // Hide the warning overlay after 3 seconds
+                        setTimeout(() => { ecoWarning.classList.remove('show'); }, 3000);
+                    }
+                } else {
+                    ecoWarning.classList.remove('show');
+                }
+
+                debugStr.innerText = "SYS: OK | " + tempNum + "°C";
                 dataBuffer = "";
             }
         }
