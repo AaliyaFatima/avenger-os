@@ -101,7 +101,7 @@
         .connect-btn:hover { background: rgba(255,255,255,0.1); }
         
         #voiceBtn { margin-top: 5px; background: rgba(0, 229, 255, 0.05); color: var(--accent-cyan); border-color: var(--accent-cyan); }
-        #voiceBtn:hover { background: rgba(0, 229, 255, 0.15); }
+        #voiceBtn.listening { background: rgba(0, 230, 118, 0.15); color: var(--success); border-color: var(--success); box-shadow: 0 0 15px rgba(0,230,118,0.2); }
         
         .debug-console { text-align: center; font-family: monospace; font-size: 11px; color: var(--warning); min-height: 15px; margin-top: 5px; letter-spacing: 0.5px;}
     </style>
@@ -151,35 +151,16 @@
             <div class="progress-track"><div class="progress-fill" id="battBar" style="background:var(--accent-blue); width:0%;"></div></div>
         </div>
 
-        <!-- TRIP COMPUTER UI -->
-        <div class="trip-row">
-            <div class="trip-panel">
-                <div class="label">DAY</div>
-                <div class="trip-val"><span id="valDay">0.0</span> <span class="unit">KM</span></div>
-            </div>
-            <div class="trip-panel">
-                <div class="label">WEEK</div>
-                <div class="trip-val"><span id="valWeek">0.0</span> <span class="unit">KM</span></div>
-            </div>
-            <div class="trip-panel">
-                <div class="label">MONTH</div>
-                <div class="trip-val"><span id="valMonth">0.0</span> <span class="unit">KM</span></div>
-            </div>
-        </div>
-
         <button id="connectBtn" class="connect-btn">INITIALIZE LINK</button>
-        <!-- VOICE COMMAND BUTTON -->
-        <button id="voiceBtn" class="connect-btn"><i class="fa-solid fa-microphone"></i> ACTIVATE VOICE</button>
+        <!-- MASTER VOICE TOGGLE -->
+        <button id="voiceBtn" class="connect-btn"><i class="fa-solid fa-power-off"></i> START JARVIS MODE</button>
         
         <div id="debugStr" class="debug-console">SYS: STANDBY</div>
 
         <div class="controls-grid">
             <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-power-off"></i></div>
             <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-sun"></i></div>
-            
-            <!-- Starter Button -->
             <div class="control-btn" id="startCard" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
-            
             <div class="control-btn" onmousedown="handleHold('H','active-horn',true)" onmouseup="handleHold('h','active-horn',false)" ontouchstart="handleHold('H','active-horn',true); event.preventDefault();" ontouchend="handleHold('h','active-horn',false); event.preventDefault();"><i class="fa-solid fa-volume-high"></i></div>
         </div>
     </div>
@@ -196,7 +177,11 @@
         let isEcoMode = false;
         let isAlarmArmed = false;
         let lastServiceKm = null;
-        let isVoiceActive = false; // Tracks if continuous listening is toggled on
+        
+        // JARVIS LOGIC VARIABLES
+        let jarvisModeActive = false;
+        let assistantAwake = false;
+        let awakeTimer = null;
 
         const connectBtn = document.getElementById('connectBtn');
         const voiceBtn = document.getElementById('voiceBtn');
@@ -204,50 +189,6 @@
         const debugStr = document.getElementById('debugStr');
         const ecoWarning = document.getElementById('ecoWarning');
         const ecoTimerDisplay = document.getElementById('ecoTimerDisplay');
-
-        // Trip Computer Logic
-        function getWeekNumber(d) {
-            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
-            var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
-            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
-        }
-
-        function checkTripDates() {
-            let now = new Date();
-            let todayStr = now.getFullYear() + "-" + now.getMonth() + "-" + now.getDate();
-            let weekStr = now.getFullYear() + "-W" + getWeekNumber(now);
-            let monthStr = now.getFullYear() + "-" + now.getMonth();
-
-            if(localStorage.getItem('currentDay') !== todayStr) { localStorage.setItem('currentDay', todayStr); localStorage.setItem('tripDay', '0'); }
-            if(localStorage.getItem('currentWeek') !== weekStr) { localStorage.setItem('currentWeek', weekStr); localStorage.setItem('tripWeek', '0'); }
-            if(localStorage.getItem('currentMonth') !== monthStr) { localStorage.setItem('currentMonth', monthStr); localStorage.setItem('tripMonth', '0'); }
-        }
-
-        function updateTripUI() {
-            document.getElementById('valDay').innerText = (parseFloat(localStorage.getItem('tripDay') || 0)).toFixed(1);
-            document.getElementById('valWeek').innerText = (parseFloat(localStorage.getItem('tripWeek') || 0)).toFixed(1);
-            document.getElementById('valMonth').innerText = (parseFloat(localStorage.getItem('tripMonth') || 0)).toFixed(1);
-        }
-
-        function processTripDistance(currentServiceKm) {
-            if(lastServiceKm === null) { lastServiceKm = currentServiceKm; return; }
-            if(currentServiceKm < lastServiceKm) {
-                let diff = lastServiceKm - currentServiceKm;
-                if(diff > 0 && diff < 50) { 
-                    checkTripDates();
-                    let d = parseFloat(localStorage.getItem('tripDay') || 0) + diff;
-                    let w = parseFloat(localStorage.getItem('tripWeek') || 0) + diff;
-                    let m = parseFloat(localStorage.getItem('tripMonth') || 0) + diff;
-                    
-                    localStorage.setItem('tripDay', d); localStorage.setItem('tripWeek', w); localStorage.setItem('tripMonth', m);
-                    updateTripUI();
-                }
-            }
-            lastServiceKm = currentServiceKm;
-        }
-
-        window.onload = () => { checkTripDates(); updateTripUI(); };
 
         // Text to Speech Function
         function speak(text) {
@@ -269,7 +210,13 @@
             if (commandQueue.length > 0) processQueue();
         }
         
-        function sendCommand(c) { if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); } }
+        function sendCommand(c) { 
+            if (rxChar) {
+                if (commandQueue[commandQueue.length - 1] !== c) { commandQueue.push(c); processQueue(); } 
+            } else {
+                debugStr.innerText = "SYS: PLEASE INITIALIZE LINK FIRST";
+            }
+        }
 
         function toggleIgnition() {
             const card = document.getElementById('ignCard');
@@ -283,12 +230,6 @@
         }
         
         function toggleLights() { if(!isIgnitionOn) return; const card = document.getElementById('lightCard'); let on = card.classList.toggle('active-lights'); sendCommand(on ? 'L' : 'l'); }
-        
-        function handleHold(cmd, cls, down) { 
-            const btn = event.currentTarget; 
-            if (down) { if (isIgnitionOn) { sendCommand(cmd); btn.classList.add(cls); } } 
-            else { sendCommand(cmd); btn.classList.remove(cls); } 
-        }
 
         function toggleEcoMode() {
             isEcoMode = !isEcoMode; const btn = document.getElementById('ecoBtn');
@@ -302,27 +243,15 @@
             else { btn.innerText = "ALARM OFF"; btn.classList.remove('active'); sendCommand('a'); }
         }
 
-        function resetService() {
-            if(confirm("Are you sure you want to reset the Service Interval to 3000 KM?")) {
-                sendCommand('R'); 
-                document.getElementById('serviceVal').innerText = "3000"; document.getElementById('serviceBar').style.width = "100%";
-                document.getElementById('serviceVal').style.color = "white"; document.getElementById('serviceBar').style.background = "var(--accent-cyan)";
-                document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)";
-                window.notifiedOil = false; lastServiceKm = 3000; 
-            }
-        }
-
         // --- AUTO-CRANK FUNCTION (0.8 Seconds) ---
         function crankEngine() {
             const startCard = document.getElementById('startCard');
             if (!isIgnitionOn) { toggleIgnition(); }
             
             speak("Cranking engine.");
-            
             startCard.classList.add('active-start');
             sendCommand('S'); 
             
-            // Hold it for 800 milliseconds (0.8 seconds)
             setTimeout(() => {
                 sendCommand('s'); 
                 startCard.classList.remove('active-start');
@@ -330,16 +259,16 @@
             }, 800);
         }
 
-        // --- CONTINUOUS WAKE-WORD LOGIC ("Avenger") ---
+        // --- COMMAND EXECUTION LOGIC ---
         function processVoiceCommand(command) {
+            if (!rxChar) { speak("Bluetooth disconnected."); return; }
+
             const wantsOn = command.includes('on') || command.includes('start') || command.includes('wake');
             const wantsOff = command.includes('off') || command.includes('stop') || command.includes('kill') || command.includes('sleep');
 
-            // 1. CRANK ENGINE
             if ((command.includes('start') || command.includes('crank')) && (command.includes('bike') || command.includes('engine'))) {
                 crankEngine();
             }
-            // 2. IGNITION
             else if (command.includes('ignition') || command.includes('bike') || command.includes('engine') || command.includes('wake') || command.includes('sleep')) {
                 if (wantsOn && !isIgnitionOn) { toggleIgnition(); speak("Ignition is on."); } 
                 else if (wantsOff && isIgnitionOn) { toggleIgnition(); speak("Ignition is off."); } 
@@ -347,7 +276,6 @@
                 else if (wantsOff && !isIgnitionOn) { speak("Ignition is already off."); } 
                 else if (!wantsOn && !wantsOff) { toggleIgnition(); speak(isIgnitionOn ? "Ignition on." : "Ignition off."); }
             } 
-            // 3. LIGHTS
             else if (command.includes('light') || command.includes('headlight') || command.includes('lamps')) {
                 const isLightOn = document.getElementById('lightCard').classList.contains('active-lights');
                 if (wantsOn && !isLightOn) { toggleLights(); speak("Headlights turned on."); } 
@@ -356,91 +284,115 @@
                 else if (wantsOff && !isLightOn) { speak("Lights are already off."); } 
                 else if (!wantsOn && !wantsOff) { toggleLights(); speak(isLightOn ? "Headlights off." : "Headlights on."); }
             } 
-            // 4. ECO MODE
             else if (command.includes('eco')) {
                 if (wantsOn && !isEcoMode) { toggleEcoMode(); speak("Eco mode activated."); }
                 else if (wantsOff && isEcoMode) { toggleEcoMode(); speak("Eco mode deactivated."); }
                 else if (!wantsOn && !wantsOff) { toggleEcoMode(); speak(isEcoMode ? "Eco mode activated." : "Eco mode deactivated."); }
             } 
-            // 5. ALARM
             else if (command.includes('alarm')) {
                 if (wantsOn && !isAlarmArmed) { toggleAlarm(); speak("Security alarm armed."); }
                 else if (wantsOff && isAlarmArmed) { toggleAlarm(); speak("Security alarm disarmed."); }
                 else if (!wantsOn && !wantsOff) { toggleAlarm(); speak(isAlarmArmed ? "Security alarm armed." : "Security alarm disarmed."); }
             } 
             else {
-                speak("I heard Avenger, but didn't understand the command.");
+                speak("Command not recognized.");
             }
         }
 
+        // --- TWO-STEP JARVIS WAKE LOGIC ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
-            recognition.continuous = true; // This keeps it listening constantly!
+            recognition.continuous = true; 
             recognition.interimResults = false;
             recognition.lang = 'en-US';
 
             recognition.onstart = () => {
-                debugStr.innerText = "SYS: LISTENING CONTINUOUSLY...";
-                voiceBtn.innerHTML = '<i class="fa-solid fa-microphone-lines"></i> LISTENING FOR "AVENGER"...';
-                voiceBtn.style.background = "rgba(255, 23, 68, 0.2)";
-                voiceBtn.style.color = "var(--danger)";
-                voiceBtn.style.borderColor = "var(--danger)";
+                debugStr.innerText = "SYS: BACKGROUND LISTENING ACTIVE";
             };
 
             recognition.onresult = (event) => {
-                // Get the very last phrase that was spoken
                 const current = event.resultIndex;
-                const command = event.results[current][0].transcript.toLowerCase();
-                debugStr.innerText = 'HEARD: "' + command + '"';
+                const transcript = event.results[current][0].transcript.toLowerCase();
+                debugStr.innerText = 'HEARD: "' + transcript + '"';
 
-                // THE MAGIC WAKE WORD
-                if (command.includes('avenger')) {
-                    debugStr.innerText = 'WAKE WORD ACCEPTED: "' + command + '"';
-                    processVoiceCommand(command);
+                // Check if sentence has actual commands
+                const hasAction = transcript.includes('start') || transcript.includes('engine') || transcript.includes('ignition') || transcript.includes('light') || transcript.includes('eco') || transcript.includes('alarm') || transcript.includes('bike');
+
+                if (!assistantAwake) {
+                    // WE ARE ASLEEP. Listen for the wake word.
+                    if (transcript.includes('avenger')) {
+                        if (hasAction) {
+                            // Single-breath command (e.g. "Avenger start the engine")
+                            processVoiceCommand(transcript);
+                        } else {
+                            // Two-step command (e.g. "Avenger" ... waits for response)
+                            assistantAwake = true;
+                            speak("Awaiting command.");
+                            
+                            // Visual UI change indicating it is waiting
+                            document.getElementById('statusPill').innerText = "AWAITING CMD";
+                            document.getElementById('statusPill').style.color = "var(--warning)";
+                            
+                            // Go back to sleep if no command given in 6 seconds
+                            clearTimeout(awakeTimer);
+                            awakeTimer = setTimeout(() => {
+                                assistantAwake = false;
+                                speak("Standby.");
+                                document.getElementById('statusPill').innerText = "ONLINE";
+                                document.getElementById('statusPill').style.color = "var(--success)";
+                            }, 6000);
+                        }
+                    }
+                } else {
+                    // WE ARE AWAKE. Process whatever was just said.
+                    clearTimeout(awakeTimer);
+                    assistantAwake = false; 
+                    
+                    // Reset UI
+                    document.getElementById('statusPill').innerText = "ONLINE";
+                    document.getElementById('statusPill').style.color = "var(--success)";
+                    
+                    processVoiceCommand(transcript);
                 }
             };
 
             recognition.onerror = (event) => {
-                if (event.error !== 'no-speech') {
-                    debugStr.innerText = "VOICE ERR: " + event.error;
-                }
+                // Ignore silent timeouts, just restart
             };
 
             recognition.onend = () => {
-                // If it times out but the user still wants it active, restart it automatically
-                if (isVoiceActive) {
+                // If Jarvis Mode is toggled ON, restart the microphone instantly if it auto-closes
+                if (jarvisModeActive) {
                     try { recognition.start(); } catch(e) {}
-                } else {
-                    voiceBtn.innerHTML = '<i class="fa-solid fa-microphone"></i> ACTIVATE VOICE';
-                    voiceBtn.style.background = "rgba(0, 229, 255, 0.05)";
-                    voiceBtn.style.color = "var(--accent-cyan)";
-                    voiceBtn.style.borderColor = "var(--accent-cyan)";
-                    debugStr.innerText = "SYS: VOICE DEACTIVATED";
                 }
             };
 
+            // Master Toggle Button
             voiceBtn.addEventListener('click', () => {
                 if (window.location.protocol === 'file:' || window.location.protocol === 'content:') {
-                    debugStr.innerText = "ERR: MIC REQUIRES HTTPS";
-                    alert("Voice recognition is blocked by your browser because this file is opened locally. Please host it on a secure (HTTPS) server to use voice commands.");
+                    alert("Voice requires HTTPS hosting.");
                     return;
                 }
                 
-                // Toggle continuous listening on or off
-                if (isVoiceActive) {
-                    isVoiceActive = false;
-                    recognition.stop();
-                } else {
-                    isVoiceActive = true;
+                jarvisModeActive = !jarvisModeActive;
+                
+                if (jarvisModeActive) {
+                    voiceBtn.classList.add('listening');
+                    voiceBtn.innerHTML = '<i class="fa-solid fa-microphone-lines"></i> JARVIS MODE ACTIVE';
                     try { recognition.start(); } catch(e) {}
+                } else {
+                    voiceBtn.classList.remove('listening');
+                    voiceBtn.innerHTML = '<i class="fa-solid fa-power-off"></i> START JARVIS MODE';
+                    recognition.stop();
                 }
             });
         } else {
             voiceBtn.style.display = "none";
-            debugStr.innerText = "SYS: VOICE RECOGNITION NOT SUPPORTED";
+            debugStr.innerText = "SYS: VOICE NOT SUPPORTED";
         }
 
+        // --- BLUETOOTH CONNECTION ---
         async function connectBluetooth() {
             try {
                 debugStr.innerText = "SYS: REQUESTING DEVICE...";
@@ -456,8 +408,8 @@
         }
 
         function onDisconnected() {
-            statusPill.innerText = "RECONNECTING..."; statusPill.className = "status-pill"; debugStr.innerText = "SYS: CONNECTION LOST. ATTEMPTING RECONNECT...";
-            speak("Bluetooth connection lost. Attempting to reconnect.");
+            statusPill.innerText = "RECONNECTING..."; statusPill.className = "status-pill"; debugStr.innerText = "SYS: CONNECTION LOST.";
+            speak("Bluetooth connection lost.");
             setTimeout(() => { if (bleDevice && !bleDevice.gatt.connected) connectBluetooth(); }, 2000);
         }
 
@@ -468,96 +420,24 @@
 
             let parts = dataBuffer.split(',');
             if (parts.length >= 5 && (dataBuffer.endsWith('\n') || dataBuffer.endsWith('\r'))) {
-                
-                // 1. Service & Trips
-                let kmRemaining = parseFloat(parts[0]);
-                if (!isNaN(kmRemaining)) {
-                    processTripDistance(kmRemaining);
-                    let displayKm = kmRemaining < 0 ? 0 : Math.round(kmRemaining);
-                    document.getElementById('serviceVal').innerText = displayKm;
-                    let percent = Math.max((displayKm / 3000) * 100, 0);
-                    document.getElementById('serviceBar').style.width = percent + "%";
-                    
-                    if (kmRemaining <= 0) {
-                        document.getElementById('serviceVal').style.color = "var(--danger)"; document.getElementById('serviceBar').style.background = "var(--danger)"; document.getElementById('serviceBar').style.boxShadow = "0 0 15px var(--danger)";
-                        if(!window.notifiedOil) { alert("⚠️ MAINTENANCE ALERT: Engine oil change needed!"); window.notifiedOil = true; }
-                    } else {
-                        document.getElementById('serviceVal').style.color = "white"; document.getElementById('serviceBar').style.background = "var(--accent-cyan)"; document.getElementById('serviceBar').style.boxShadow = "0 0 12px var(--accent-cyan)"; window.notifiedOil = false;
-                    }
-                }
-
-                // 2. Temperature
                 let tempNum = parseFloat(parts[1]);
-                let tElem = document.getElementById('tempDigit'); let tBar = document.getElementById('tempBar');
-                if (isNaN(tempNum) || tempNum <= 0) { tElem.textContent = "NO SENSOR"; tElem.style.fontSize = "16px"; tElem.style.color = "var(--danger)"; tBar.style.width = "0%"; } 
-                else {
-                    tElem.style.fontSize = "28px"; 
-                    if (tempNum < 35) { tElem.textContent = "COLD"; tElem.style.color = "var(--accent-blue)"; tBar.style.background = "var(--accent-blue)"; tBar.style.width = "0%"; } 
-                    else {
-                        tElem.textContent = Math.round(tempNum);
-                        let p = Math.min(Math.max((tempNum - 35) / 65, 0), 1) * 100; tBar.style.width = p + "%";
-                        if (tempNum > 100) { tElem.style.color = "var(--danger)"; tBar.style.background = "var(--danger)"; } else { tElem.style.color = "white"; tBar.style.background = "white"; }
-                    }
-                }
-
-                // 3. Gear / Neutral
                 let gearStr = parts[2].replace(/[^A-Za-z0-9-]/g, '');
-                let gearDisplay = document.getElementById('gearVal'); gearDisplay.innerText = gearStr;
-                if (gearStr === "N") { gearDisplay.classList.add('neutral'); } 
-                else { gearDisplay.classList.remove('neutral'); }
-
-                // 4. Battery Voltage
                 let battVolts = parseFloat(parts[3]);
-                let bElem = document.getElementById('battDigit');
-                let bBar = document.getElementById('battBar');
-                
-                if (!isNaN(battVolts)) {
-                    bElem.textContent = battVolts.toFixed(1);
-                    let battPercent = Math.min(Math.max((battVolts - 9.0) / 5.5, 0), 1) * 100; 
-                    bBar.style.width = battPercent + "%";
-                    
-                    if (battVolts >= 13.5) { // Charging
-                        bElem.parentElement.style.color = "var(--success)"; 
-                        bBar.style.background = "var(--success)";
-                        bBar.style.boxShadow = "0 0 12px var(--success)";
-                    } 
-                    else if (battVolts >= 11.5) { // Healthy Parked
-                        bElem.parentElement.style.color = "var(--accent-blue)"; 
-                        bBar.style.background = "var(--accent-blue)";
-                        bBar.style.boxShadow = "0 0 12px var(--accent-blue)";
-                    } 
-                    else { // Dangerously Low / Starter Cranking
-                        bElem.parentElement.style.color = "var(--danger)"; 
-                        bBar.style.background = "var(--danger)";
-                        bBar.style.boxShadow = "0 0 15px var(--danger)";
-                    }
-                }
-
-                // 5. Eco Mode Countdown string from ESP32
                 let ecoStr = parts[4].replace(/[\n\r]/g, ''); 
-                if (ecoStr !== "OFF" && ecoStr !== "") {
-                    ecoWarning.classList.add('show');
-                    ecoTimerDisplay.innerText = ecoStr;
-                    
-                    // If ESP32 triggered the auto-shutoff
-                    if (ecoStr === "STOPPED") {
-                        document.getElementById('ignCard').classList.remove('active-ignition');
-                        isIgnitionOn = false;
-                        
-                        // Turn off Eco Mode UI button so it matches ESP32 state
-                        isEcoMode = false;
-                        document.getElementById('ecoBtn').innerText = "ECO OFF";
-                        document.getElementById('ecoBtn').classList.remove('active');
-                        
-                        setTimeout(() => { ecoWarning.classList.remove('show'); }, 3000);
-                        
-                        speak("Eco mode auto stop engaged.");
-                    }
-                } else {
-                    ecoWarning.classList.remove('show');
+
+                document.getElementById('tempDigit').textContent = isNaN(tempNum) ? "--" : Math.round(tempNum);
+                document.getElementById('gearVal').innerText = gearStr;
+                if(gearStr === "N") document.getElementById('gearVal').classList.add('neutral'); else document.getElementById('gearVal').classList.remove('neutral');
+                document.getElementById('battDigit').textContent = isNaN(battVolts) ? "--.-" : battVolts.toFixed(1);
+
+                if (ecoStr === "STOPPED") {
+                    document.getElementById('ignCard').classList.remove('active-ignition');
+                    isIgnitionOn = false; isEcoMode = false;
+                    document.getElementById('ecoBtn').innerText = "ECO OFF";
+                    document.getElementById('ecoBtn').classList.remove('active');
+                    speak("Eco mode auto stop engaged.");
                 }
 
-                debugStr.innerText = "SYS: OK | " + tempNum + "°C";
                 dataBuffer = "";
             }
         }
