@@ -176,7 +176,10 @@
         <div class="controls-grid">
             <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-power-off"></i></div>
             <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-sun"></i></div>
-            <div class="control-btn" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
+            
+            <!-- Added id="startCard" here for voice engine cranking -->
+            <div class="control-btn" id="startCard" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
+            
             <div class="control-btn" onmousedown="handleHold('H','active-horn',true)" onmouseup="handleHold('h','active-horn',false)" ontouchstart="handleHold('H','active-horn',true); event.preventDefault();" ontouchend="handleHold('h','active-horn',false); event.preventDefault();"><i class="fa-solid fa-volume-high"></i></div>
         </div>
     </div>
@@ -308,7 +311,30 @@
             }
         }
 
-        // Conversational & Smart Voice Logic with TTS
+        // --- NEW AUTO-CRANK FUNCTION ---
+        function crankEngine() {
+            const startCard = document.getElementById('startCard');
+            
+            // Turn on ignition first if it's currently off
+            if (!isIgnitionOn) {
+                toggleIgnition();
+            }
+            
+            speak("Cranking engine.");
+            
+            // Press the starter button programmatically
+            startCard.classList.add('active-start');
+            sendCommand('S'); // Send the Start command
+            
+            // Hold it for 2.5 seconds, then release
+            setTimeout(() => {
+                sendCommand('s'); // Send the Stop Start command
+                startCard.classList.remove('active-start');
+                speak("Engine started.");
+            }, 2500);
+        }
+
+        // --- UPDATED VOICE COMMAND LOGIC ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
@@ -323,7 +349,6 @@
                 voiceBtn.style.color = "var(--danger)";
                 voiceBtn.style.borderColor = "var(--danger)";
                 
-                // Play a tiny beep to signal it's listening (optional, using AudioContext)
                 try {
                     const ctx = new (window.AudioContext || window.webkitAudioContext)();
                     const osc = ctx.createOscillator(); osc.type = 'sine'; osc.frequency.value = 800;
@@ -337,27 +362,31 @@
                 const command = event.results[0][0].transcript.toLowerCase();
                 debugStr.innerText = 'VOICE CMD: "' + command + '"';
 
-                const wantsOn = command.includes('on') || command.includes('start') || command.includes('wake');
+                const wantsOn = command.includes('on') || command.includes('wake');
                 const wantsOff = command.includes('off') || command.includes('stop') || command.includes('kill') || command.includes('sleep');
 
-                // 1. ENGINE / IGNITION
-                if (command.includes('bike') || command.includes('engine') || command.includes('ignition') || command.includes('wake up') || command.includes('go to sleep')) {
+                // 1. CRANK ENGINE (Starter Motor sequence)
+                if (command.includes('start bike') || command.includes('start the bike') || command.includes('start engine') || command.includes('start the engine') || command.includes('crank')) {
+                    crankEngine();
+                }
+                // 2. IGNITION (Power Only)
+                else if (command.includes('ignition') || command.includes('wake up') || command.includes('go to sleep') || command.includes('bike on') || command.includes('bike off')) {
                     if (wantsOn && !isIgnitionOn) {
                         toggleIgnition();
-                        speak("Okay, bike engine is running.");
+                        speak("Ignition is on.");
                     } else if (wantsOff && isIgnitionOn) {
                         toggleIgnition();
-                        speak("Bike engine is now off.");
+                        speak("Ignition is off.");
                     } else if (wantsOn && isIgnitionOn) {
-                        speak("The engine is already running.");
+                        speak("Ignition is already on.");
                     } else if (wantsOff && !isIgnitionOn) {
-                        speak("The engine is already off.");
+                        speak("Ignition is already off.");
                     } else if (!wantsOn && !wantsOff) {
                         toggleIgnition();
-                        speak(isIgnitionOn ? "Engine started." : "Engine stopped.");
+                        speak(isIgnitionOn ? "Ignition on." : "Ignition off.");
                     }
                 } 
-                // 2. LIGHTS
+                // 3. LIGHTS
                 else if (command.includes('light') || command.includes('headlight') || command.includes('lamps')) {
                     const isLightOn = document.getElementById('lightCard').classList.contains('active-lights');
                     if (wantsOn && !isLightOn) {
@@ -372,23 +401,19 @@
                         speak("Lights are already off.");
                     } else if (!wantsOn && !wantsOff) {
                         toggleLights();
-                        speak(isLightOn ? "Headlights are now off." : "Headlights are now on.");
+                        speak(isLightOn ? "Headlights off." : "Headlights on.");
                     }
                 } 
-                // 3. ECO MODE
+                // 4. ECO MODE
                 else if (command.includes('eco')) {
                     if (wantsOn && !isEcoMode) { toggleEcoMode(); speak("Eco mode activated."); }
                     else if (wantsOff && isEcoMode) { toggleEcoMode(); speak("Eco mode deactivated."); }
-                    else if (wantsOn && isEcoMode) { speak("Eco mode is already active."); }
-                    else if (wantsOff && !isEcoMode) { speak("Eco mode is already off."); }
                     else if (!wantsOn && !wantsOff) { toggleEcoMode(); speak(isEcoMode ? "Eco mode activated." : "Eco mode deactivated."); }
                 } 
-                // 4. ALARM
+                // 5. ALARM
                 else if (command.includes('alarm')) {
                     if (wantsOn && !isAlarmArmed) { toggleAlarm(); speak("Security alarm armed."); }
                     else if (wantsOff && isAlarmArmed) { toggleAlarm(); speak("Security alarm disarmed."); }
-                    else if (wantsOn && isAlarmArmed) { speak("Alarm is already armed."); }
-                    else if (wantsOff && !isAlarmArmed) { speak("Alarm is already off."); }
                     else if (!wantsOn && !wantsOff) { toggleAlarm(); speak(isAlarmArmed ? "Security alarm armed." : "Security alarm disarmed."); }
                 } 
                 else {
@@ -409,6 +434,13 @@
             };
 
             voiceBtn.addEventListener('click', () => {
+                // Safety check for mobile browsers blocking local file microphones
+                if (window.location.protocol === 'file:' || window.location.protocol === 'content:') {
+                    debugStr.innerText = "ERR: MIC REQUIRES HTTPS";
+                    alert("Voice recognition is blocked by your browser because this file is opened locally. Please host it on a secure (HTTPS) server to use voice commands.");
+                    return;
+                }
+                
                 try { recognition.start(); } catch(e) { recognition.stop(); }
             });
         } else {
