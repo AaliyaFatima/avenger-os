@@ -190,16 +190,79 @@
         const ecoWarning = document.getElementById('ecoWarning');
         const ecoTimerDisplay = document.getElementById('ecoTimerDisplay');
 
+        // --- JARVIS VOICE SETUP ---
+        let jarvisVoice = null;
+
+        // Load available voices from the device and find a British Male
+        if ('speechSynthesis' in window) {
+            window.speechSynthesis.onvoiceschanged = () => {
+                const voices = window.speechSynthesis.getVoices();
+                // Try to find the Google UK Male voice, or any British English voice
+                jarvisVoice = voices.find(voice => voice.name.includes('Google UK English Male')) || 
+                              voices.find(voice => voice.name.includes('UK English')) ||
+                              voices.find(voice => voice.lang === 'en-GB') || 
+                              voices[0]; // Fallback to default if no British voice is found
+            };
+        }
+
         // Text to Speech Function
         function speak(text) {
             if ('speechSynthesis' in window) {
                 window.speechSynthesis.cancel(); 
                 const utterance = new SpeechSynthesisUtterance(text);
-                utterance.rate = 1.0; 
-                utterance.pitch = 1.1; 
+                
+                // Set the voice, speed, and depth to sound like Jarvis
+                if (jarvisVoice) utterance.voice = jarvisVoice;
+                utterance.rate = 0.95;  // Slightly slower, more calculated
+                utterance.pitch = 0.8;  // Deeper voice
+
                 window.speechSynthesis.speak(utterance);
             }
         }
+
+        // Trip Computer Logic
+        function getWeekNumber(d) {
+            d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+            d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+            var yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+            return Math.ceil((((d - yearStart) / 86400000) + 1)/7);
+        }
+
+        function checkTripDates() {
+            let now = new Date();
+            let todayStr = now.getFullYear() + "-" + now.getMonth() + "-" + now.getDate();
+            let weekStr = now.getFullYear() + "-W" + getWeekNumber(now);
+            let monthStr = now.getFullYear() + "-" + now.getMonth();
+
+            if(localStorage.getItem('currentDay') !== todayStr) { localStorage.setItem('currentDay', todayStr); localStorage.setItem('tripDay', '0'); }
+            if(localStorage.getItem('currentWeek') !== weekStr) { localStorage.setItem('currentWeek', weekStr); localStorage.setItem('tripWeek', '0'); }
+            if(localStorage.getItem('currentMonth') !== monthStr) { localStorage.setItem('currentMonth', monthStr); localStorage.setItem('tripMonth', '0'); }
+        }
+
+        function updateTripUI() {
+            document.getElementById('valDay').innerText = (parseFloat(localStorage.getItem('tripDay') || 0)).toFixed(1);
+            document.getElementById('valWeek').innerText = (parseFloat(localStorage.getItem('tripWeek') || 0)).toFixed(1);
+            document.getElementById('valMonth').innerText = (parseFloat(localStorage.getItem('tripMonth') || 0)).toFixed(1);
+        }
+
+        function processTripDistance(currentServiceKm) {
+            if(lastServiceKm === null) { lastServiceKm = currentServiceKm; return; }
+            if(currentServiceKm < lastServiceKm) {
+                let diff = lastServiceKm - currentServiceKm;
+                if(diff > 0 && diff < 50) { 
+                    checkTripDates();
+                    let d = parseFloat(localStorage.getItem('tripDay') || 0) + diff;
+                    let w = parseFloat(localStorage.getItem('tripWeek') || 0) + diff;
+                    let m = parseFloat(localStorage.getItem('tripMonth') || 0) + diff;
+                    
+                    localStorage.setItem('tripDay', d); localStorage.setItem('tripWeek', w); localStorage.setItem('tripMonth', m);
+                    updateTripUI();
+                }
+            }
+            lastServiceKm = currentServiceKm;
+        }
+
+        window.onload = () => { checkTripDates(); updateTripUI(); };
 
         // BLE Logic
         async function processQueue() {
@@ -259,6 +322,12 @@
             }, 800);
         }
 
+        function handleHold(cmd, cls, down) { 
+            const btn = event.currentTarget; 
+            if (down) { if (isIgnitionOn) { sendCommand(cmd); btn.classList.add(cls); } } 
+            else { sendCommand(cmd); btn.classList.remove(cls); } 
+        }
+
         // --- COMMAND EXECUTION LOGIC ---
         function processVoiceCommand(command) {
             if (!rxChar) { speak("Bluetooth disconnected."); return; }
@@ -316,25 +385,19 @@
                 const transcript = event.results[current][0].transcript.toLowerCase();
                 debugStr.innerText = 'HEARD: "' + transcript + '"';
 
-                // Check if sentence has actual commands
                 const hasAction = transcript.includes('start') || transcript.includes('engine') || transcript.includes('ignition') || transcript.includes('light') || transcript.includes('eco') || transcript.includes('alarm') || transcript.includes('bike');
 
                 if (!assistantAwake) {
-                    // WE ARE ASLEEP. Listen for the wake word.
                     if (transcript.includes('avenger')) {
                         if (hasAction) {
-                            // Single-breath command (e.g. "Avenger start the engine")
                             processVoiceCommand(transcript);
                         } else {
-                            // Two-step command (e.g. "Avenger" ... waits for response)
                             assistantAwake = true;
                             speak("Awaiting command.");
                             
-                            // Visual UI change indicating it is waiting
                             document.getElementById('statusPill').innerText = "AWAITING CMD";
                             document.getElementById('statusPill').style.color = "var(--warning)";
                             
-                            // Go back to sleep if no command given in 6 seconds
                             clearTimeout(awakeTimer);
                             awakeTimer = setTimeout(() => {
                                 assistantAwake = false;
@@ -345,11 +408,9 @@
                         }
                     }
                 } else {
-                    // WE ARE AWAKE. Process whatever was just said.
                     clearTimeout(awakeTimer);
                     assistantAwake = false; 
                     
-                    // Reset UI
                     document.getElementById('statusPill').innerText = "ONLINE";
                     document.getElementById('statusPill').style.color = "var(--success)";
                     
@@ -362,13 +423,11 @@
             };
 
             recognition.onend = () => {
-                // If Jarvis Mode is toggled ON, restart the microphone instantly if it auto-closes
                 if (jarvisModeActive) {
                     try { recognition.start(); } catch(e) {}
                 }
             };
 
-            // Master Toggle Button
             voiceBtn.addEventListener('click', () => {
                 if (window.location.protocol === 'file:' || window.location.protocol === 'content:') {
                     alert("Voice requires HTTPS hosting.");
