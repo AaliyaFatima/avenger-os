@@ -177,7 +177,7 @@
             <div class="control-btn" id="ignCard" onclick="toggleIgnition()"><i class="fa-solid fa-power-off"></i></div>
             <div class="control-btn" id="lightCard" onclick="toggleLights()"><i class="fa-solid fa-sun"></i></div>
             
-            <!-- Added id="startCard" here for voice engine cranking -->
+            <!-- Starter Button -->
             <div class="control-btn" id="startCard" onmousedown="handleHold('S','active-start',true)" onmouseup="handleHold('s','active-start',false)" ontouchstart="handleHold('S','active-start',true); event.preventDefault();" ontouchend="handleHold('s','active-start',false); event.preventDefault();"><i class="fa-solid fa-bolt"></i></div>
             
             <div class="control-btn" onmousedown="handleHold('H','active-horn',true)" onmouseup="handleHold('h','active-horn',false)" ontouchstart="handleHold('H','active-horn',true); event.preventDefault();" ontouchend="handleHold('h','active-horn',false); event.preventDefault();"><i class="fa-solid fa-volume-high"></i></div>
@@ -251,7 +251,7 @@
         // Text to Speech Function
         function speak(text) {
             if ('speechSynthesis' in window) {
-                window.speechSynthesis.cancel(); // Stop any currently playing audio
+                window.speechSynthesis.cancel(); 
                 const utterance = new SpeechSynthesisUtterance(text);
                 utterance.rate = 1.0; 
                 utterance.pitch = 1.1; 
@@ -311,7 +311,7 @@
             }
         }
 
-        // --- NEW AUTO-CRANK FUNCTION ---
+        // --- AUTO-CRANK FUNCTION (Updated to 1.5 Seconds) ---
         function crankEngine() {
             const startCard = document.getElementById('startCard');
             
@@ -324,17 +324,17 @@
             
             // Press the starter button programmatically
             startCard.classList.add('active-start');
-            sendCommand('S'); // Send the Start command
+            sendCommand('S'); 
             
-            // Hold it for 2.5 seconds, then release
+            // Hold it for 1.5 seconds, then release
             setTimeout(() => {
-                sendCommand('s'); // Send the Stop Start command
+                sendCommand('s'); 
                 startCard.classList.remove('active-start');
                 speak("Engine started.");
-            }, 2500);
+            }, 1500);
         }
 
-        // --- UPDATED VOICE COMMAND LOGIC ---
+        // --- SMARTER VOICE COMMAND LOGIC ---
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         if (SpeechRecognition) {
             const recognition = new SpeechRecognition();
@@ -362,15 +362,15 @@
                 const command = event.results[0][0].transcript.toLowerCase();
                 debugStr.innerText = 'VOICE CMD: "' + command + '"';
 
-                const wantsOn = command.includes('on') || command.includes('wake');
+                const wantsOn = command.includes('on') || command.includes('start') || command.includes('wake');
                 const wantsOff = command.includes('off') || command.includes('stop') || command.includes('kill') || command.includes('sleep');
 
-                // 1. CRANK ENGINE (Starter Motor sequence)
-                if (command.includes('start bike') || command.includes('start the bike') || command.includes('start engine') || command.includes('start the engine') || command.includes('crank')) {
+                // 1. CRANK ENGINE (must include BOTH "start/crank" AND "bike/engine")
+                if ((command.includes('start') || command.includes('crank')) && (command.includes('bike') || command.includes('engine'))) {
                     crankEngine();
                 }
-                // 2. IGNITION (Power Only)
-                else if (command.includes('ignition') || command.includes('wake up') || command.includes('go to sleep') || command.includes('bike on') || command.includes('bike off')) {
+                // 2. IGNITION / POWER TOGGLE
+                else if (command.includes('ignition') || command.includes('bike') || command.includes('engine') || command.includes('wake') || command.includes('sleep')) {
                     if (wantsOn && !isIgnitionOn) {
                         toggleIgnition();
                         speak("Ignition is on.");
